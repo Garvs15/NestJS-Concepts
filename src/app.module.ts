@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HelloModule } from './hello/hello.module';
@@ -11,10 +11,30 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { Post } from './posts/entities/post.entity';
 import { AuthModule } from './auth/auth.module';
 import { User } from './auth/entities/user.entity';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { CacheModule } from "@nestjs/cache-manager";
+import { FileUploadModule } from './file-upload/file-upload.module';
+import { File } from './file-upload/entities/file.entity';
+import { EventsModule } from './events/events.module';
+import { LoggerMiddleware } from './common/middleware/logger.middleware';
 
 // root module -> use all the sub modules
 @Module({
   imports: [
+     ConfigModule.forRoot({
+        isGlobal: true,
+     }),
+     ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 5,
+      }
+     ]),
+     CacheModule.register({
+      isGlobal: true,
+      ttl: 30000,
+      max: 100,
+     }),
     TypeOrmModule.forRoot({
       type: 'postgres',
       host: 'localhost',
@@ -22,7 +42,7 @@ import { User } from './auth/entities/user.entity';
       username: 'postgres',
       password: '200415',
       database: 'nestjs-project',
-      entities: [Post, User],
+      entities: [Post, User, File],
       autoLoadEntities: true,
       synchronize: true,
     }),
@@ -33,8 +53,13 @@ import { User } from './auth/entities/user.entity';
       // }),
       load: [appConfig],
     }),
-    HelloModule, UserModule, PostsModule, AuthModule],
+    HelloModule, UserModule, PostsModule, AuthModule, FileUploadModule, EventsModule],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // apply the middleware for all the routes
+    consumer.apply(LoggerMiddleware).forRoutes('*')
+  }
+}
